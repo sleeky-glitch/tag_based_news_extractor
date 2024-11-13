@@ -6,59 +6,54 @@ import pandas as pd
 from datetime import datetime
 import os
 import warnings
-from nltk.data import find
-from pathlib import Path
+import ssl
+
+# SSL Certificate handling
+try:
+  _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+  pass
+else:
+  ssl._create_default_https_context = _create_unverified_https_context
 
 # Suppress warnings
-warnings.filterwarnings('ignore', category=SyntaxWarning)
+warnings.filterwarnings('ignore')
 
 # Set page configuration
 st.set_page_config(page_title="News Article Tag Scraper", page_icon="📰", layout="wide")
 
-# Initialize NLTK data directory
-NLTK_DATA_DIR = os.path.join(os.getcwd(), "nltk_data")
-if not os.path.exists(NLTK_DATA_DIR):
-  os.makedirs(NLTK_DATA_DIR)
-
-# Set NLTK data path
-nltk.data.path.append(NLTK_DATA_DIR)
-os.environ['NLTK_DATA'] = NLTK_DATA_DIR
-
+# Download NLTK data at startup
 @st.cache_resource
 def download_nltk_data():
   try:
-      with st.spinner('Downloading required NLTK data...'):
-          # Specify the complete list of required NLTK packages
-          packages = [
-              'punkt',
-              'averaged_perceptron_tagger',
-              'maxent_ne_chunker',
-              'words',
-              'stopwords'
-          ]
-          
-          # Download each package with explicit error handling
-          for package in packages:
-              try:
-                  nltk.download(package, download_dir=NLTK_DATA_DIR, quiet=True)
-                  st.write(f"Successfully downloaded {package}")
-              except Exception as e:
-                  st.error(f"Failed to download {package}: {str(e)}")
-                  return False
-              
-          # Verify the downloads
-          try:
-              nltk.data.find('tokenizers/punkt')
-              nltk.data.find('taggers/averaged_perceptron_tagger')
-              nltk.data.find('chunkers/maxent_ne_chunker')
-              nltk.data.find('corpora/words')
-          except LookupError as e:
-              st.error(f"Verification failed: {str(e)}")
-              return False
-              
+      nltk.download('punkt')
+      nltk.download('averaged_perceptron_tagger')
+      nltk.download('maxent_ne_chunker')
+      nltk.download('words')
+      nltk.download('stopwords')
       return True
   except Exception as e:
-      st.error(f"Error in download_nltk_data: {str(e)}")
+      st.error(f"Error downloading NLTK data: {str(e)}")
+      return False
+
+# Initialize NLTK
+download_nltk_data()
+
+def process_article(article):
+  try:
+      article.download()
+      article.parse()
+      
+      if article.text:
+          # Simple keyword extraction without using article.nlp()
+          words = article.text.lower().split()
+          # Remove common words and short words
+          keywords = list(set([word for word in words if len(word) > 3]))[:10]
+          article.keywords = keywords
+          return True
+      return False
+  except Exception as e:
+      st.warning(f"Article processing failed: {str(e)}")
       return False
 
 def scrape_news(tags, max_articles_per_site=10):
@@ -85,36 +80,20 @@ def scrape_news(tags, max_articles_per_site=10):
               if article_count >= max_articles_per_site:
                   break
                   
-              try:
-                  article.download()
-                  article.parse()
-                  
-                  # Add explicit error handling for NLP
-                  try:
-                      if article.text:
-                          article.nlp()
-                  except Exception as nlp_error:
-                      st.warning(f"NLP processing failed for article: {str(nlp_error)}")
-                      continue
-                  
-                  if article.text:
-                      if any(tag.lower() in article.text.lower() or 
-                            tag.lower() in ' '.join(article.keywords).lower() 
-                            for tag in tags):
-                          
-                          results.append({
-                              'source': site,
-                              'title': article.title,
-                              'text': article.text[:1000],
-                              'url': article.url,
-                              'keywords': ', '.join(article.keywords),
-                              'publish_date': article.publish_date
-                          })
-                          article_count += 1
+              if process_article(article):
+                  if any(tag.lower() in article.text.lower() or 
+                        tag.lower() in ' '.join(article.keywords).lower() 
+                        for tag in tags):
                       
-              except Exception as e:
-                  st.warning(f"Error processing article from {site}: {str(e)}")
-                  continue
+                      results.append({
+                          'source': site,
+                          'title': article.title,
+                          'text': article.text[:1000],
+                          'url': article.url,
+                          'keywords': ', '.join(article.keywords),
+                          'publish_date': article.publish_date
+                      })
+                      article_count += 1
                   
           progress_bar.progress((idx + 1) / len(news_sites))
           
@@ -141,12 +120,6 @@ def save_results(results):
       mime='text/csv'
   )
   return filename
-
-# Initialize NLTK data
-if download_nltk_data():
-  st.success("NLTK data downloaded successfully!")
-else:
-  st.error("Failed to download NLTK data. Some features may not work correctly.")
 
 # UI Layout
 st.title('📰 News Article Tag Scraper')
