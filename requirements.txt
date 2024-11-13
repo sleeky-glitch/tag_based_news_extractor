@@ -1,5 +1,6 @@
 streamlit
-beautifulsoup4
-requests
 nltk
+requests
+beautifulsoup4
 pandas
+fake-useragent
