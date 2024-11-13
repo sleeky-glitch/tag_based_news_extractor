@@ -14,28 +14,46 @@ st.set_page_config(
 )
 
 # Create a directory for NLTK data if it doesn't exist
-if not os.path.exists("nltk_data"):
-    os.makedirs("nltk_data")
+NLTK_DATA_DIR = os.path.join(os.getcwd(), "nltk_data")
+if not os.path.exists(NLTK_DATA_DIR):
+    os.makedirs(NLTK_DATA_DIR)
 
 # Configure NLTK to use the local directory
-nltk.data.path.append("nltk_data")
+nltk.data.path.insert(0, NLTK_DATA_DIR)
 
 # Download required NLTK data
 @st.cache_resource
 def download_nltk_data():
     try:
         with st.spinner('Downloading required NLTK data...'):
-            nltk.download('punkt', download_dir="nltk_data")
-            nltk.download('averaged_perceptron_tagger', download_dir="nltk_data")
-            nltk.download('maxent_ne_chunker', download_dir="nltk_data")
-            nltk.download('words', download_dir="nltk_data")
-        return True
+            # Download all required NLTK data
+            required_packages = [
+                'punkt',
+                'punkt_tab',
+                'averaged_perceptron_tagger',
+                'maxent_ne_chunker',
+                'words'
+            ]
+            
+            for package in required_packages:
+                try:
+                    nltk.download(package, download_dir=NLTK_DATA_DIR, quiet=True)
+                    st.write(f"Successfully downloaded {package}")
+                except Exception as e:
+                    st.warning(f"Error downloading {package}: {str(e)}")
+                    
+            # Verify downloads
+            nltk.data.find('tokenizers/punkt')
+            return True
     except Exception as e:
         st.error(f"Error downloading NLTK data: {str(e)}")
         return False
 
 # Initialize NLTK data
-download_nltk_data()
+if download_nltk_data():
+    st.success("NLTK data downloaded successfully!")
+else:
+    st.error("Failed to download NLTK data. Some features may not work correctly.")
 
 def scrape_news(tags, max_articles_per_site=10):
     """
@@ -172,6 +190,7 @@ st.markdown("""
     <p>Built with Streamlit and Newspaper3k</p>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 
